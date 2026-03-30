@@ -1,26 +1,89 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, CalendarDays, Clock } from "lucide-react";
-import { services, timeSlots } from "@/data/mockData";
+import { publicAPI, patientAPI } from "@/lib/api";
+import { toast } from "sonner";
 
 const steps = ["Servicio", "Fecha y hora", "Confirmar"];
 
+interface ServiceItem {
+  id: string;
+  name: string;
+  description: string;
+  duration: number;
+  durationMinutes: number;
+  price: number;
+  category: string;
+  active: boolean;
+}
+
 export default function BookAppointment() {
   const [step, setStep] = useState(0);
+  const [services, setServices] = useState<ServiceItem[]>([]);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<{ startTime: string; endTime: string }[]>([]);
   const [confirmed, setConfirmed] = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingServices, setLoadingServices] = useState(true);
 
   const service = services.find((s) => s.id === selectedService);
 
-  // Generate next 14 days
+  // Load services
+  useEffect(() => {
+    publicAPI.getServices().then(res => {
+      const list = res.data?.services || res.data || [];
+      setServices(list.filter((s: any) => s.isActive !== false && s.active !== false).map((s: any) => ({
+        ...s,
+        duration: s.duration || s.durationMinutes,
+        durationMinutes: s.duration || s.durationMinutes,
+        price: parseFloat(s.price),
+        active: true,
+      })));
+    }).catch(() => toast.error("Error cargando servicios")).finally(() => setLoadingServices(false));
+  }, []);
+
+  // Generate next 14 days excluding sundays
   const dates = Array.from({ length: 14 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() + i + 1);
     return d.toISOString().split("T")[0];
-  }).filter((d) => new Date(d).getDay() !== 0); // exclude sundays
+  }).filter((d) => new Date(d + "T12:00:00").getDay() !== 0);
 
-  const availableSlots = timeSlots.filter((_, i) => i % 2 === 0 || Math.random() > 0.3); // simulate availability
+  // Load available slots when date changes
+  useEffect(() => {
+    if (!selectedDate || !service) return;
+    setLoadingSlots(true);
+    setSelectedTime(null);
+    publicAPI.getAvailability(selectedDate, service.durationMinutes || service.duration)
+      .then(res => {
+        setAvailableSlots(res.data.slots || []);
+      })
+      .catch(() => {
+        setAvailableSlots([]);
+        toast.error("Error cargando disponibilidad");
+      })
+      .finally(() => setLoadingSlots(false));
+  }, [selectedDate, service?.durationMinutes]);
+
+  const handleConfirm = async () => {
+    if (!selectedService || !selectedDate || !selectedTime) return;
+    setSubmitting(true);
+    try {
+      await patientAPI.createAppointment({
+        serviceId: selectedService,
+        date: selectedDate,
+        startTime: selectedTime,
+      });
+      setConfirmed(true);
+      toast.success("¡Cita reservada exitosamente!");
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Error al reservar la cita");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (confirmed) {
     return (
@@ -32,7 +95,7 @@ export default function BookAppointment() {
         <p className="text-muted-foreground mb-2">Tu cita ha sido registrada exitosamente.</p>
         <div className="rounded-xl border bg-card p-5 shadow-card mt-6 text-left space-y-2">
           <p className="text-sm"><span className="font-medium text-foreground">Servicio:</span> <span className="text-muted-foreground">{service?.name}</span></p>
-          <p className="text-sm"><span className="font-medium text-foreground">Fecha:</span> <span className="text-muted-foreground">{selectedDate}</span></p>
+          <p className="text-sm"><span className="font-medium text-foreground">Fecha:</span> <span className="text-muted-foreground">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span></p>
           <p className="text-sm"><span className="font-medium text-foreground">Hora:</span> <span className="text-muted-foreground">{selectedTime}</span></p>
           <p className="text-sm"><span className="font-medium text-foreground">Estado:</span> <span className="text-warning font-medium">Pendiente de confirmación</span></p>
         </div>
@@ -41,6 +104,10 @@ export default function BookAppointment() {
         </button>
       </div>
     );
+  }
+
+  if (loadingServices) {
+    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
   }
 
   return (
@@ -64,7 +131,7 @@ export default function BookAppointment() {
       {step === 0 && (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground mb-4">Selecciona el servicio que necesitas:</p>
-          {services.filter((s) => s.active).map((s) => (
+          {services.map((s) => (
             <button
               key={s.id}
               onClick={() => setSelectedService(s.id)}
@@ -77,7 +144,7 @@ export default function BookAppointment() {
                   <p className="font-semibold text-foreground">{s.name}</p>
                   <p className="text-sm text-muted-foreground mt-0.5">{s.description}</p>
                   <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {s.duration} min</span>
+                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {s.durationMinutes} min</span>
                     <span className="font-medium text-primary">${s.price}</span>
                   </div>
                 </div>
@@ -130,19 +197,25 @@ export default function BookAppointment() {
           {selectedDate && (
             <div>
               <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2"><Clock className="h-4 w-4 text-primary" /> Selecciona un horario</p>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {availableSlots.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setSelectedTime(t)}
-                    className={`py-2.5 px-3 rounded-lg border text-sm font-medium transition-all ${
-                      selectedTime === t ? "border-primary bg-accent text-primary" : "bg-card text-foreground hover:border-primary/30"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+              {loadingSlots ? (
+                <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" /></div>
+              ) : availableSlots.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">No hay horarios disponibles para esta fecha.</p>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {availableSlots.map((slot) => (
+                    <button
+                      key={slot.startTime}
+                      onClick={() => setSelectedTime(slot.startTime)}
+                      className={`py-2.5 px-3 rounded-lg border text-sm font-medium transition-all ${
+                        selectedTime === slot.startTime ? "border-primary bg-accent text-primary" : "bg-card text-foreground hover:border-primary/30"
+                      }`}
+                    >
+                      {slot.startTime}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -173,11 +246,11 @@ export default function BookAppointment() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Duración</span>
-                <span className="font-medium text-foreground">{service?.duration} min</span>
+                <span className="font-medium text-foreground">{service?.durationMinutes} min</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Fecha</span>
-                <span className="font-medium text-foreground">{selectedDate}</span>
+                <span className="font-medium text-foreground">{selectedDate && new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Hora</span>
@@ -195,8 +268,8 @@ export default function BookAppointment() {
             <button onClick={() => setStep(1)} className="flex-1 py-3 rounded-lg font-semibold border text-foreground hover:bg-secondary transition-colors">
               Atrás
             </button>
-            <button onClick={() => setConfirmed(true)} className="flex-1 gradient-dental py-3 rounded-lg font-semibold text-white hover:opacity-90">
-              Confirmar reserva
+            <button onClick={handleConfirm} disabled={submitting} className="flex-1 gradient-dental py-3 rounded-lg font-semibold text-white hover:opacity-90 disabled:opacity-50">
+              {submitting ? "Reservando..." : "Confirmar reserva"}
             </button>
           </div>
         </div>

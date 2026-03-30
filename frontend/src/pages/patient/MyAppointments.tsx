@@ -1,14 +1,41 @@
-import { useState } from "react";
-import { appointments } from "@/data/mockData";
+import { useState, useEffect } from "react";
+import { patientAPI } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
-import type { AppointmentStatus } from "@/data/mockData";
+import { toast } from "sonner";
 
 export default function MyAppointments() {
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
-  const myAppts = appointments.filter((a) => a.patientId === "p1");
-  const upcoming = myAppts.filter((a) => a.status === "confirmed" || a.status === "pending");
-  const past = myAppts.filter((a) => a.status === "completed" || a.status === "cancelled");
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadAppointments = () => {
+    setLoading(true);
+    patientAPI.getAppointments()
+      .then(res => setAppointments(res.data?.appointments || res.data || []))
+      .catch(() => toast.error("Error cargando citas"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { loadAppointments(); }, []);
+
+  const upcoming = appointments.filter((a) => a.status === "confirmed" || a.status === "pending");
+  const past = appointments.filter((a) => a.status === "completed" || a.status === "cancelled");
   const list = tab === "upcoming" ? upcoming : past;
+
+  const handleCancel = async (id: string) => {
+    if (!confirm("¿Estás seguro de cancelar esta cita?")) return;
+    try {
+      await patientAPI.cancelAppointment(id);
+      toast.success("Cita cancelada");
+      loadAppointments();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Error al cancelar");
+    }
+  };
+
+  if (loading) {
+    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -30,26 +57,19 @@ export default function MyAppointments() {
         </div>
       ) : (
         <div className="space-y-3">
-          {list.map((a) => (
+          {list.map((a: any) => (
             <div key={a.id} className="rounded-xl border bg-card p-4 shadow-card">
               <div className="flex items-start justify-between mb-2">
-                <h3 className="font-semibold text-foreground">{a.serviceName}</h3>
+                <h3 className="font-semibold text-foreground">{a.service?.name || 'Servicio'}</h3>
                 <StatusBadge status={a.status} />
               </div>
               <div className="flex gap-4 text-sm text-muted-foreground">
-                <span>📅 {a.date}</span>
-                <span>🕐 {a.time}</span>
+                <span>📅 {new Date(a.date).toLocaleDateString('es-ES')}</span>
+                <span>🕐 {a.startTime}</span>
               </div>
-              {a.status === "pending" && (
+              {(a.status === "pending" || a.status === "confirmed") && (
                 <div className="mt-3 flex gap-2">
-                  <button className="text-xs px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive font-medium hover:bg-destructive/20 transition-colors">
-                    Cancelar
-                  </button>
-                </div>
-              )}
-              {a.status === "confirmed" && (
-                <div className="mt-3 flex gap-2">
-                  <button className="text-xs px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive font-medium hover:bg-destructive/20 transition-colors">
+                  <button onClick={() => handleCancel(a.id)} className="text-xs px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive font-medium hover:bg-destructive/20 transition-colors">
                     Cancelar cita
                   </button>
                 </div>

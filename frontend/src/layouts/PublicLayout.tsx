@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import clinicLogo from "@/assets/clinic-logo.jpg";
 
 const navLinks = [
@@ -12,6 +13,10 @@ const navLinks = [
 export default function PublicLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  const { user, logout } = useAuth();
+
+  const dashboardLink = user?.role === 'patient' ? '/paciente' : '/admin';
+  const dashboardLabel = user?.role === 'patient' ? 'Mi Panel' : 'Panel Admin';
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -36,12 +41,25 @@ export default function PublicLayout() {
                 {l.label}
               </Link>
             ))}
-            <Link to="/login" className="ml-2 px-4 py-2 rounded-lg text-sm font-medium text-primary hover:bg-accent transition-colors">
-              Iniciar sesión
-            </Link>
-            <Link to="/registro" className="ml-1 gradient-dental px-4 py-2 rounded-lg text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
-              Registrarse
-            </Link>
+            {user ? (
+              <>
+                <Link to={dashboardLink} className="ml-2 px-4 py-2 rounded-lg text-sm font-medium text-primary hover:bg-accent transition-colors">
+                  {dashboardLabel}
+                </Link>
+                <button onClick={logout} className="ml-1 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary transition-colors">
+                  Cerrar sesión
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="ml-2 px-4 py-2 rounded-lg text-sm font-medium text-primary hover:bg-accent transition-colors">
+                  Iniciar sesión
+                </Link>
+                <Link to="/registro" className="ml-1 gradient-dental px-4 py-2 rounded-lg text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+                  Registrarse
+                </Link>
+              </>
+            )}
           </nav>
 
           <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden p-2 rounded-lg hover:bg-secondary">
@@ -64,12 +82,25 @@ export default function PublicLayout() {
               </Link>
             ))}
             <hr className="border-border" />
-            <Link to="/login" onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 rounded-lg text-sm font-medium text-primary">
-              Iniciar sesión
-            </Link>
-            <Link to="/registro" onClick={() => setMenuOpen(false)} className="block gradient-dental px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground text-center">
-              Registrarse
-            </Link>
+            {user ? (
+              <>
+                <Link to={dashboardLink} onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 rounded-lg text-sm font-medium text-primary">
+                  {dashboardLabel}
+                </Link>
+                <button onClick={() => { logout(); setMenuOpen(false); }} className="block w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary">
+                  Cerrar sesión
+                </button>
+              </>
+            ) : (
+              <>
+                <Link to="/login" onClick={() => setMenuOpen(false)} className="block px-4 py-2.5 rounded-lg text-sm font-medium text-primary">
+                  Iniciar sesión
+                </Link>
+                <Link to="/registro" onClick={() => setMenuOpen(false)} className="block gradient-dental px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground text-center">
+                  Registrarse
+                </Link>
+              </>
+            )}
           </div>
         )}
       </header>

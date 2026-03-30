@@ -1,9 +1,24 @@
-import { useState } from "react";
-import { patients } from "@/data/mockData";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { patientAPI } from "@/lib/api";
 
 export default function PatientProfile() {
-  const patient = patients[0]; // Mock: María García
-  const [editing, setEditing] = useState(false);
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    patientAPI.getProfile()
+      .then(res => setProfile(res.data?.user || res.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+  }
+
+  const p = profile || user;
 
   return (
     <div className="max-w-lg mx-auto">
@@ -12,47 +27,58 @@ export default function PatientProfile() {
       <div className="rounded-xl border bg-card shadow-card">
         <div className="p-6 border-b flex items-center gap-4">
           <div className="h-14 w-14 rounded-full gradient-dental flex items-center justify-center text-xl font-bold text-white">
-            {patient.firstName[0]}{patient.lastName[0]}
+            {p?.firstName?.[0]}{p?.lastName?.[0]}
           </div>
           <div>
-            <h2 className="font-semibold text-foreground text-lg">{patient.firstName} {patient.lastName}</h2>
-            <p className="text-sm text-muted-foreground">Paciente desde {new Date(patient.registeredAt).toLocaleDateString("es-ES", { month: "long", year: "numeric" })}</p>
+            <h2 className="font-semibold text-foreground text-lg">{p?.firstName} {p?.lastName}</h2>
+            <p className="text-sm text-muted-foreground">
+              Paciente desde {p?.createdAt ? new Date(p.createdAt).toLocaleDateString("es-ES", { month: "long", year: "numeric" }) : '—'}
+            </p>
           </div>
         </div>
 
         <div className="p-6 space-y-4">
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Nombre</label>
-            <input disabled={!editing} defaultValue={patient.firstName} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-ring" />
+            <input disabled defaultValue={p?.firstName || ''} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none" />
           </div>
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Apellido</label>
-            <input disabled={!editing} defaultValue={patient.lastName} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-ring" />
+            <input disabled defaultValue={p?.lastName || ''} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none" />
           </div>
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
-            <input disabled={!editing} defaultValue={patient.email} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-ring" />
+            <input disabled defaultValue={p?.email || ''} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none" />
           </div>
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Teléfono</label>
-            <input disabled={!editing} defaultValue={patient.phone} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-ring" />
+            <input disabled defaultValue={p?.phone || ''} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha de nacimiento</label>
-            <input disabled={!editing} type="date" defaultValue={patient.birthDate} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-ring" />
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Rol</label>
+            <input disabled defaultValue={p?.role === 'patient' ? 'Paciente' : p?.role || ''} className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm disabled:opacity-60 focus:outline-none capitalize" />
           </div>
         </div>
 
-        <div className="p-6 border-t flex gap-3">
-          {editing ? (
-            <>
-              <button onClick={() => setEditing(false)} className="flex-1 py-2.5 rounded-lg border font-medium text-foreground hover:bg-secondary text-sm">Cancelar</button>
-              <button onClick={() => setEditing(false)} className="flex-1 gradient-dental py-2.5 rounded-lg font-medium text-white text-sm hover:opacity-90">Guardar</button>
-            </>
-          ) : (
-            <button onClick={() => setEditing(true)} className="w-full gradient-dental py-2.5 rounded-lg font-medium text-white text-sm hover:opacity-90">Editar perfil</button>
-          )}
-        </div>
+        {profile?.stats && (
+          <div className="p-6 border-t">
+            <h3 className="text-sm font-semibold text-foreground mb-3">Estadísticas</h3>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-lg bg-accent p-3">
+                <p className="text-xl font-bold text-foreground">{profile.stats.total || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Total citas</p>
+              </div>
+              <div className="rounded-lg bg-accent p-3">
+                <p className="text-xl font-bold text-foreground">{profile.stats.upcoming || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Próximas</p>
+              </div>
+              <div className="rounded-lg bg-accent p-3">
+                <p className="text-xl font-bold text-foreground">{profile.stats.completed || 0}</p>
+                <p className="text-[10px] text-muted-foreground">Completadas</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

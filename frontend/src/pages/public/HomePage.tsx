@@ -1,9 +1,31 @@
 import { Link } from "react-router-dom";
 import { CalendarPlus, Shield, Clock, Star, Phone, Sparkles, Heart, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { publicAPI } from "@/lib/api";
+import { clinicInfo as fallbackClinic, services as fallbackServices } from "@/data/mockData";
 import clinicLogo from "@/assets/clinic-logo.jpg";
-import { services, clinicInfo } from "@/data/mockData";
 
 export default function HomePage() {
+  const [services, setServices] = useState(fallbackServices);
+  const [clinicInfo] = useState(fallbackClinic);
+
+  useEffect(() => {
+    publicAPI.getServices().then(res => {
+      const list = res.data?.services || res.data || [];
+      if (list.length) {
+        setServices(list.map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          duration: s.duration || s.durationMinutes,
+          price: parseFloat(s.price),
+          active: s.isActive !== undefined ? s.isActive : s.active,
+          category: s.category || 'General',
+        })));
+      }
+    }).catch(() => {});
+  }, []);
+
   return (
     <div>
       {/* Hero */}
@@ -84,7 +106,7 @@ export default function HomePage() {
             <p className="mt-2 text-muted-foreground">Soluciones completas para tu salud bucal.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {services.slice(0, 6).map((s) => (
+            {services.filter(s => s.active).slice(0, 6).map((s) => (
               <div key={s.id} className="rounded-xl border bg-card p-5 shadow-card hover:shadow-card-hover transition-shadow">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="font-semibold text-foreground">{s.name}</h3>

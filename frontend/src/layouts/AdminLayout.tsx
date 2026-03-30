@@ -1,6 +1,7 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { LayoutDashboard, CalendarDays, Stethoscope, Clock, Users, Settings, LogOut, Menu, X } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import clinicLogo from "@/assets/clinic-logo.jpg";
 
 const navItems = [
@@ -15,6 +16,16 @@ const navItems = [
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  const initials = user ? `${user.firstName[0]}${user.lastName[0]}` : 'AD';
+  const fullName = user ? `${user.firstName} ${user.lastName}` : 'Admin';
 
   const isActive = (path: string) => location.pathname === path || (path !== "/admin" && location.pathname.startsWith(path + "/"));
 
@@ -46,15 +57,15 @@ export default function AdminLayout() {
         </nav>
         <div className="p-4 border-t border-sidebar-border">
           <div className="flex items-center gap-3 mb-3">
-            <div className="h-9 w-9 rounded-full bg-sidebar-primary flex items-center justify-center text-sm font-bold text-white">AD</div>
+            <div className="h-9 w-9 rounded-full bg-sidebar-primary flex items-center justify-center text-sm font-bold text-white">{initials}</div>
             <div>
-              <p className="text-sm font-medium text-white">Admin</p>
-              <p className="text-xs text-sidebar-foreground">Administrador</p>
+              <p className="text-sm font-medium text-white">{fullName}</p>
+              <p className="text-xs text-sidebar-foreground capitalize">{user?.role || 'Administrador'}</p>
             </div>
           </div>
-          <Link to="/" className="flex items-center gap-2 text-sm text-sidebar-foreground hover:text-white transition-colors">
+          <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-sidebar-foreground hover:text-white transition-colors">
             <LogOut className="h-4 w-4" /> Cerrar sesión
-          </Link>
+          </button>
         </div>
       </aside>
 
@@ -64,7 +75,7 @@ export default function AdminLayout() {
             <Menu className="h-5 w-5" />
           </button>
           <span className="font-bold text-foreground">CitaDental Admin</span>
-          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-primary-foreground">AD</div>
+          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-primary-foreground">{initials}</div>
         </header>
 
         {sidebarOpen && (
@@ -93,9 +104,9 @@ export default function AdminLayout() {
                 ))}
               </nav>
               <div className="p-4 border-t border-sidebar-border">
-                <Link to="/" className="flex items-center gap-2 text-sm text-sidebar-foreground hover:text-white">
+                <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-sidebar-foreground hover:text-white">
                   <LogOut className="h-4 w-4" /> Cerrar sesión
-                </Link>
+                </button>
               </div>
             </div>
           </div>

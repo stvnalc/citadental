@@ -1,18 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Plus, Filter } from "lucide-react";
-import { appointments } from "@/data/mockData";
+import { Search, Plus } from "lucide-react";
+import { adminAPI } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { AppointmentStatus } from "@/data/mockData";
 
 export default function AdminAppointments() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<AppointmentStatus | "all">("all");
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = appointments.filter((a) => {
-    const matchesSearch = a.patientName.toLowerCase().includes(search.toLowerCase()) || a.serviceName.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === "all" || a.status === filter;
-    return matchesSearch && matchesFilter;
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (filter !== 'all') params.status = filter;
+    adminAPI.getAppointments(params)
+      .then(res => setAppointments(res.data?.appointments || res.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [filter]);
+
+  const filtered = appointments.filter((a: any) => {
+    const name = `${a.user?.firstName || ''} ${a.user?.lastName || ''}`;
+    const svc = a.service?.name || '';
+    return name.toLowerCase().includes(search.toLowerCase()) || svc.toLowerCase().includes(search.toLowerCase());
   });
 
   return (
@@ -34,12 +45,12 @@ export default function AdminAppointments() {
             className="w-full rounded-lg border bg-card pl-10 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
+        <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 overflow-x-auto">
           {(["all", "confirmed", "pending", "completed", "cancelled"] as const).map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              onClick={() => { setFilter(f); setLoading(true); }}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
                 filter === f ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
               }`}
             >
@@ -49,72 +60,78 @@ export default function AdminAppointments() {
         </div>
       </div>
 
-      {/* Desktop table */}
-      <div className="hidden md:block rounded-xl border bg-card shadow-card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b bg-secondary/50">
-              <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Paciente</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Servicio</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Fecha</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Hora</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Estado</th>
-              <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">Acción</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {filtered.map((a) => (
-              <tr key={a.id} className="hover:bg-secondary/30 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground">
-                      {a.patientName.split(" ").map((n) => n[0]).join("")}
-                    </div>
-                    <span className="text-sm font-medium text-foreground">{a.patientName}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">{a.serviceName}</td>
-                <td className="px-4 py-3 text-sm text-foreground">{a.date}</td>
-                <td className="px-4 py-3 text-sm font-medium text-foreground">{a.time}</td>
-                <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
-                <td className="px-4 py-3 text-right">
-                  <Link to={`/admin/citas/${a.id}`} className="text-sm text-primary font-medium hover:underline">Ver</Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filtered.length === 0 && (
-          <p className="p-8 text-center text-muted-foreground text-sm">No se encontraron citas.</p>
-        )}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
+      ) : (
+        <>
+          {/* Desktop table */}
+          <div className="hidden md:block rounded-xl border bg-card shadow-card overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-secondary/50">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Paciente</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Servicio</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Fecha</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Hora</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Estado</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-muted-foreground">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filtered.map((a: any) => {
+                  const name = `${a.user?.firstName || ''} ${a.user?.lastName || ''}`;
+                  const initials = `${a.user?.firstName?.[0] || ''}${a.user?.lastName?.[0] || ''}`;
+                  return (
+                    <tr key={a.id} className="hover:bg-secondary/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground">{initials}</div>
+                          <span className="text-sm font-medium text-foreground">{name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{a.service?.name}</td>
+                      <td className="px-4 py-3 text-sm text-foreground">{new Date(a.date).toLocaleDateString('es-ES')}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-foreground">{a.startTime}</td>
+                      <td className="px-4 py-3"><StatusBadge status={a.status} /></td>
+                      <td className="px-4 py-3 text-right">
+                        <Link to={`/admin/citas/${a.id}`} className="text-sm text-primary font-medium hover:underline">Ver</Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filtered.length === 0 && <p className="p-8 text-center text-muted-foreground text-sm">No se encontraron citas.</p>}
+          </div>
 
-      {/* Mobile cards */}
-      <div className="md:hidden space-y-3">
-        {filtered.map((a) => (
-          <Link key={a.id} to={`/admin/citas/${a.id}`} className="block rounded-xl border bg-card p-4 shadow-card">
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground">
-                  {a.patientName.split(" ").map((n) => n[0]).join("")}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{a.patientName}</p>
-                  <p className="text-xs text-muted-foreground">{a.serviceName}</p>
-                </div>
-              </div>
-              <StatusBadge status={a.status} />
-            </div>
-            <div className="flex gap-4 text-xs text-muted-foreground mt-2">
-              <span>📅 {a.date}</span>
-              <span>🕐 {a.time}</span>
-            </div>
-          </Link>
-        ))}
-        {filtered.length === 0 && (
-          <p className="py-8 text-center text-muted-foreground text-sm">No se encontraron citas.</p>
-        )}
-      </div>
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-3">
+            {filtered.map((a: any) => {
+              const name = `${a.user?.firstName || ''} ${a.user?.lastName || ''}`;
+              const initials = `${a.user?.firstName?.[0] || ''}${a.user?.lastName?.[0] || ''}`;
+              return (
+                <Link key={a.id} to={`/admin/citas/${a.id}`} className="block rounded-xl border bg-card p-4 shadow-card">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-xs font-bold text-accent-foreground">{initials}</div>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{name}</p>
+                        <p className="text-xs text-muted-foreground">{a.service?.name}</p>
+                      </div>
+                    </div>
+                    <StatusBadge status={a.status} />
+                  </div>
+                  <div className="flex gap-4 text-xs text-muted-foreground mt-2">
+                    <span>📅 {new Date(a.date).toLocaleDateString('es-ES')}</span>
+                    <span>🕐 {a.startTime}</span>
+                  </div>
+                </Link>
+              );
+            })}
+            {filtered.length === 0 && <p className="py-8 text-center text-muted-foreground text-sm">No se encontraron citas.</p>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
