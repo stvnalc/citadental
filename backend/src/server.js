@@ -13,6 +13,9 @@ const notificationRoutes = require('./routes/notifications');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// ─── Trust proxy (for rate limiter behind reverse proxy) ───
+app.set('trust proxy', 1);
+
 // ─── Middleware ───
 app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
