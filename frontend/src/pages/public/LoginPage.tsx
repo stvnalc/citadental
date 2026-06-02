@@ -31,10 +31,13 @@ export default function LoginPage() {
     }
   };
 
-  const fillDemo = (type: 'patient' | 'admin') => {
+  const fillDemo = (type: 'patient' | 'staff' | 'admin') => {
     if (type === 'admin') {
       setEmail('admin@pidentalgroup.com');
       setPassword('admin123');
+    } else if (type === 'staff') {
+      setEmail('staff@pidentalgroup.com');
+      setPassword('staff123');
     } else {
       setEmail('maria.garcia@email.com');
       setPassword('paciente123');
@@ -97,12 +100,18 @@ export default function LoginPage() {
           {/* Demo links */}
           <div className="mt-6 pt-4 border-t">
             <p className="text-xs text-muted-foreground text-center mb-3">Demo — Acceso rápido:</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => fillDemo('patient')}
                 className="text-xs text-center py-2 rounded-lg border text-foreground hover:bg-secondary transition-colors font-medium"
               >
                 Paciente Demo
+              </button>
+              <button
+                onClick={() => fillDemo('staff')}
+                className="text-xs text-center py-2 rounded-lg border text-foreground hover:bg-secondary transition-colors font-medium"
+              >
+                Staff Demo
               </button>
               <button
                 onClick={() => fillDemo('admin')}

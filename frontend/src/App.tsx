@@ -33,6 +33,7 @@ import AdminServices from "@/pages/admin/AdminServices";
 import AdminSchedule from "@/pages/admin/AdminSchedule";
 import AdminPatients from "@/pages/admin/AdminPatients";
 import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminUsers from "@/pages/admin/AdminUsers";
 
 import NotFound from "./pages/NotFound.tsx";
 
@@ -101,6 +102,7 @@ function AppRoutes() {
         <Route path="servicios" element={<AdminServices />} />
         <Route path="horarios" element={<AdminSchedule />} />
         <Route path="pacientes" element={<AdminPatients />} />
+        <Route path="usuarios" element={<AdminUsers />} />
         <Route path="configuracion" element={<AdminSettings />} />
       </Route>
 

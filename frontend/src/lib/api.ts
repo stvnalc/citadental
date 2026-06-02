@@ -67,6 +67,11 @@ export const adminAPI = {
   getDashboard: () => api.get('/admin/dashboard'),
   getAppointments: (params?: Record<string, string>) =>
     api.get('/admin/appointments', { params }),
+  exportAppointmentsReport: (range: string, status?: string) =>
+    api.get('/admin/appointments/report', {
+      params: { range, ...(status && status !== 'all' ? { status } : {}) },
+      responseType: 'blob',
+    }),
   updateAppointmentStatus: (id: string, status: string, notes?: string) =>
     api.patch(`/admin/appointments/${id}/status`, { status, notes }),
   createManualAppointment: (data: { userId: string; serviceId: string; date: string; startTime: string; notes?: string }) =>
@@ -88,6 +93,12 @@ export const adminAPI = {
   // Clinic settings
   getClinicSettings: () => api.get('/admin/clinic'),
   updateClinicSettings: (data: any) => api.patch('/admin/clinic', data),
+
+  // Users
+  getUsers: (params?: Record<string, string>) => api.get('/admin/users', { params }),
+  createUser: (data: any) => api.post('/admin/users', data),
+  updateUser: (id: string, data: any) => api.patch(`/admin/users/${id}`, data),
+  deleteUser: (id: string) => api.delete(`/admin/users/${id}`),
 };
 
 // ── Notifications ──

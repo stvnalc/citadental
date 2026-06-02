@@ -2,8 +2,11 @@ import { useState, useEffect } from "react";
 import { Plus, Edit2, Loader2 } from "lucide-react";
 import { adminAPI } from "@/lib/api";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function AdminServices() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [servicesList, setServicesList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -86,9 +89,11 @@ export default function AdminServices() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-foreground">Gestión de Servicios</h1>
-        <button onClick={openCreate} className="gradient-dental inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white hover:opacity-90">
-          <Plus className="h-4 w-4" /> Nuevo servicio
-        </button>
+        {isAdmin && (
+          <button onClick={openCreate} className="gradient-dental inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white hover:opacity-90">
+            <Plus className="h-4 w-4" /> Nuevo servicio
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -138,17 +143,19 @@ export default function AdminServices() {
                   <span className="font-medium text-primary">${Number(s.price).toFixed(2)}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button onClick={() => openEdit(s)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
-                  <Edit2 className="h-4 w-4 text-muted-foreground" />
-                </button>
-                <button
-                  onClick={() => toggleActive(s)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ${s.isActive ? 'bg-primary' : 'bg-muted'}`}
-                >
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${s.isActive ? 'left-5' : 'left-0.5'}`} />
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button onClick={() => openEdit(s)} className="p-2 rounded-lg hover:bg-secondary transition-colors">
+                    <Edit2 className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                  <button
+                    onClick={() => toggleActive(s)}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${s.isActive ? 'bg-primary' : 'bg-muted'}`}
+                  >
+                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${s.isActive ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}

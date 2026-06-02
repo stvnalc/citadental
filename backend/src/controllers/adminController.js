@@ -1,5 +1,7 @@
 const prisma = require('../config/db');
 const { timeToMinutes, minutesToTime, getAvailableSlots } = require('../services/availabilityService');
+const PDFDocument = require('pdfkit');
+const bcrypt = require('bcryptjs');
 
 // ─── Dashboard ───
 exports.getDashboard = async (req, res) => {
@@ -81,6 +83,259 @@ exports.getAppointments = async (req, res) => {
   } catch (error) {
     console.error('[Admin] getAppointments error:', error);
     res.status(500).json({ error: 'Error al obtener citas' });
+  }
+};
+
+// ─── Export Appointments Report (PDF) ───
+exports.exportAppointmentsReport = async (req, res) => {
+  try {
+    const { range, status } = req.query;
+
+    // Calculate date range
+    const now = new Date();
+    let startDate, endDate, rangeLabel;
+
+    switch (range) {
+      case 'day': {
+        startDate = new Date(now);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 1);
+        rangeLabel = 'Hoy';
+        break;
+      }
+      case 'month': {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        rangeLabel = 'Este Mes';
+        break;
+      }
+      case 'year': {
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear() + 1, 0, 1);
+        rangeLabel = 'Este Año';
+        break;
+      }
+      default:
+        return res.status(400).json({ error: 'Rango inválido. Use: day, month, year' });
+    }
+
+    // Build query
+    const where = { date: { gte: startDate, lt: endDate } };
+    if (status) where.status = status;
+
+    const appointments = await prisma.appointment.findMany({
+      where,
+      include: {
+        user: { select: { firstName: true, lastName: true, email: true, phone: true } },
+        service: { select: { name: true, duration: true, price: true } },
+      },
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+    });
+
+    // Status labels in Spanish
+    const statusLabels = {
+      pending: 'Pendiente',
+      confirmed: 'Confirmada',
+      completed: 'Completada',
+      cancelled: 'Cancelada',
+    };
+
+    // Summary data
+    const statusCounts = {
+      pending: appointments.filter(a => a.status === 'pending').length,
+      confirmed: appointments.filter(a => a.status === 'confirmed').length,
+      completed: appointments.filter(a => a.status === 'completed').length,
+      cancelled: appointments.filter(a => a.status === 'cancelled').length,
+    };
+
+    const totalRevenue = appointments
+      .filter(a => a.status !== 'cancelled')
+      .reduce((sum, a) => sum + (parseFloat(a.service?.price) || 0), 0);
+
+    // ── Create PDF Document ──
+    const doc = new PDFDocument({ size: 'LETTER', layout: 'landscape', margin: 40 });
+
+    // Collect PDF into buffer
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+
+    const pdfReady = new Promise((resolve) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+
+    // Brand colors
+    const primaryColor = '#0D9488';  // teal-600
+    const headerBg = '#0F766E';      // teal-700
+    const lightBg = '#F0FDFA';       // teal-50
+    const darkText = '#1a1a1a';
+    const mutedText = '#6b7280';
+
+    // ── Helper functions ──
+    const drawRoundedRect = (x, y, w, h, r, color) => {
+      doc.roundedRect(x, y, w, h, r).fill(color);
+    };
+
+    // ── Page 1: Header + Summary ──
+    const pageW = doc.page.width - 80; // usable width
+
+    // Header bar
+    drawRoundedRect(40, 40, pageW, 50, 6, headerBg);
+    doc.fontSize(20).fill('#FFFFFF').font('Helvetica-Bold')
+      .text('Reporte de Citas — CitaDental', 55, 53, { width: pageW - 30 });
+
+    // Subtitle
+    const generatedAt = now.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    doc.fontSize(10).fill(mutedText).font('Helvetica-Oblique')
+      .text(`Período: ${rangeLabel}  |  Generado: ${generatedAt}`, 40, 100, { align: 'center', width: pageW });
+
+    // ── Summary Cards ──
+    const cardY = 125;
+    const cardH = 60;
+    const cardW = (pageW - 30) / 4; // 4 cards with gaps
+    const cardGap = 10;
+
+    const summaryCards = [
+      { label: 'Total Citas', value: appointments.length.toString(), color: primaryColor },
+      { label: 'Confirmadas', value: statusCounts.confirmed.toString(), color: '#2563EB' },
+      { label: 'Pendientes', value: statusCounts.pending.toString(), color: '#D97706' },
+      { label: 'Completadas', value: statusCounts.completed.toString(), color: '#16A34A' },
+    ];
+
+    summaryCards.forEach((card, i) => {
+      const x = 40 + i * (cardW + cardGap);
+      // Card background
+      drawRoundedRect(x, cardY, cardW, cardH, 6, lightBg);
+      // Left accent bar
+      doc.roundedRect(x, cardY, 4, cardH, 2).fill(card.color);
+      // Value
+      doc.fontSize(22).fill(card.color).font('Helvetica-Bold')
+        .text(card.value, x + 15, cardY + 10, { width: cardW - 25 });
+      // Label
+      doc.fontSize(9).fill(mutedText).font('Helvetica')
+        .text(card.label, x + 15, cardY + 38, { width: cardW - 25 });
+    });
+
+    // Second row: Cancelled + Revenue
+    const card2Y = cardY + cardH + 12;
+    const card2W = (pageW - 10) / 2;
+
+    // Cancelled card
+    drawRoundedRect(40, card2Y, card2W, 50, 6, lightBg);
+    doc.roundedRect(40, card2Y, 4, 50, 2).fill('#DC2626');
+    doc.fontSize(18).fill('#DC2626').font('Helvetica-Bold')
+      .text(statusCounts.cancelled.toString(), 55, card2Y + 8, { width: card2W - 25 });
+    doc.fontSize(9).fill(mutedText).font('Helvetica')
+      .text('Canceladas', 55, card2Y + 32, { width: card2W - 25 });
+
+    // Revenue card
+    const revX = 40 + card2W + 10;
+    drawRoundedRect(revX, card2Y, card2W, 50, 6, lightBg);
+    doc.roundedRect(revX, card2Y, 4, 50, 2).fill(primaryColor);
+    doc.fontSize(18).fill(primaryColor).font('Helvetica-Bold')
+      .text(`$${totalRevenue.toFixed(2)}`, revX + 15, card2Y + 8, { width: card2W - 25 });
+    doc.fontSize(9).fill(mutedText).font('Helvetica')
+      .text('Ingreso Estimado (sin canceladas)', revX + 15, card2Y + 32, { width: card2W - 25 });
+
+    // ── Data Table ──
+    const tableTop = card2Y + 75;
+    const columns = [
+      { header: 'Paciente', width: 130 },
+      { header: 'Email', width: 150 },
+      { header: 'Teléfono', width: 90 },
+      { header: 'Servicio', width: 120 },
+      { header: 'Precio', width: 65 },
+      { header: 'Fecha', width: 75 },
+      { header: 'Hora', width: 55 },
+      { header: 'Estado', width: 75 },
+    ];
+
+    const totalTableW = columns.reduce((s, c) => s + c.width, 0);
+
+    // Draw table header
+    const drawTableHeader = (y) => {
+      drawRoundedRect(40, y, totalTableW, 24, 3, headerBg);
+      let xPos = 45;
+      columns.forEach((col) => {
+        doc.fontSize(8).fill('#FFFFFF').font('Helvetica-Bold')
+          .text(col.header, xPos, y + 7, { width: col.width - 10, lineBreak: false });
+        xPos += col.width;
+      });
+      return y + 24;
+    };
+
+    // Draw a single data row
+    const drawDataRow = (appointment, y, index) => {
+      const rowH = 22;
+
+      // Alternate row color
+      if (index % 2 === 0) {
+        doc.rect(40, y, totalTableW, rowH).fill(lightBg);
+      }
+
+      let xPos = 45;
+      const rowData = [
+        `${appointment.user?.firstName || ''} ${appointment.user?.lastName || ''}`.trim(),
+        appointment.user?.email || '',
+        appointment.user?.phone || '',
+        appointment.service?.name || '',
+        `$${(parseFloat(appointment.service?.price) || 0).toFixed(2)}`,
+        new Date(appointment.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        appointment.startTime || '',
+        statusLabels[appointment.status] || appointment.status,
+      ];
+
+      rowData.forEach((text, i) => {
+        const col = columns[i];
+        const fontColor = i === rowData.length - 1
+          ? (appointment.status === 'cancelled' ? '#DC2626' : appointment.status === 'completed' ? '#16A34A' : appointment.status === 'confirmed' ? '#2563EB' : '#D97706')
+          : darkText;
+        doc.fontSize(7.5).fill(fontColor).font(i === rowData.length - 1 ? 'Helvetica-Bold' : 'Helvetica')
+          .text(String(text), xPos, y + 6, { width: col.width - 10, lineBreak: false });
+        xPos += col.width;
+      });
+
+      return y + rowH;
+    };
+
+    // Render the table
+    let currentY = drawTableHeader(tableTop);
+    const pageBottom = doc.page.height - 60;
+
+    appointments.forEach((a, index) => {
+      // Check if we need a new page
+      if (currentY + 24 > pageBottom) {
+        doc.addPage({ size: 'LETTER', layout: 'landscape', margin: 40 });
+        currentY = drawTableHeader(40);
+      }
+      currentY = drawDataRow(a, currentY, index);
+    });
+
+    if (appointments.length === 0) {
+      doc.fontSize(11).fill(mutedText).font('Helvetica-Oblique')
+        .text('No se encontraron citas para este período.', 40, currentY + 15, { align: 'center', width: totalTableW });
+    }
+
+    // ── Footer ──
+    const footerY = doc.page.height - 40;
+    doc.fontSize(7).fill(mutedText).font('Helvetica')
+      .text('CitaDental — Sistema de Gestión de Citas', 40, footerY, { align: 'center', width: pageW });
+
+    // Finalize PDF
+    doc.end();
+    const pdfBuffer = await pdfReady;
+
+    // ── Send response ──
+    const dateStr = now.toISOString().slice(0, 10);
+    const rangeNames = { day: 'Hoy', month: 'Mes', year: 'Año' };
+    const filename = `Reporte_Citas_${rangeNames[range]}_${dateStr}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('[Admin] exportAppointmentsReport error:', error);
+    res.status(500).json({ error: 'Error al generar reporte' });
   }
 };
 
@@ -372,5 +627,128 @@ exports.updateClinicSettings = async (req, res) => {
   } catch (error) {
     console.error('[Admin] updateClinicSettings error:', error);
     res.status(500).json({ error: 'Error al actualizar configuración' });
+  }
+};
+
+// ─── User Management (Admin only) ───
+exports.getUsers = async (req, res) => {
+  try {
+    const { search, role, page = 1, limit = 50 } = req.query;
+    const where = {};
+
+    if (role) where.role = role;
+
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (parseInt(page) - 1) * parseInt(limit),
+        take: parseInt(limit),
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    res.json({ users, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
+  } catch (error) {
+    console.error('[Admin] getUsers error:', error);
+    res.status(500).json({ error: 'Error al obtener usuarios' });
+  }
+};
+
+exports.createUser = async (req, res) => {
+  try {
+    const { email, password, firstName, lastName, phone, role } = req.body;
+
+    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (existing) {
+      return res.status(409).json({ error: 'Ya existe un usuario con este email' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        firstName,
+        lastName,
+        phone: phone || null,
+        role,
+      },
+    });
+
+    const { password: _, ...sanitized } = user;
+    res.status(201).json({ message: 'Usuario creado', user: sanitized });
+  } catch (error) {
+    console.error('[Admin] createUser error:', error);
+    res.status(500).json({ error: 'Error al crear usuario' });
+  }
+};
+
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, email, phone, role, password } = req.body;
+
+    const userExists = await prisma.user.findUnique({ where: { id } });
+    if (!userExists) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    // Prevent admin from changing their own role (safety)
+    if (id === req.user.id && role && role !== req.user.role) {
+      return res.status(400).json({ error: 'No puedes cambiar tu propio rol' });
+    }
+
+    const data = {};
+    if (firstName !== undefined) data.firstName = firstName;
+    if (lastName !== undefined) data.lastName = lastName;
+    if (email !== undefined) {
+      // Check email uniqueness
+      const emailTaken = await prisma.user.findFirst({ where: { email: email.toLowerCase(), id: { not: id } } });
+      if (emailTaken) return res.status(409).json({ error: 'Email ya está en uso' });
+      data.email = email.toLowerCase();
+    }
+    if (phone !== undefined) data.phone = phone || null;
+    if (role !== undefined) data.role = role;
+    if (password) data.password = await bcrypt.hash(password, 12);
+
+    const updated = await prisma.user.update({ where: { id }, data });
+    const { password: _, ...sanitized } = updated;
+    res.json({ message: 'Usuario actualizado', user: sanitized });
+  } catch (error) {
+    console.error('[Admin] updateUser error:', error);
+    res.status(500).json({ error: 'Error al actualizar usuario' });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Prevent admin from deleting themselves
+    if (id === req.user.id) {
+      return res.status(400).json({ error: 'No puedes eliminar tu propia cuenta' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    await prisma.user.delete({ where: { id } });
+    res.json({ message: 'Usuario eliminado' });
+  } catch (error) {
+    console.error('[Admin] deleteUser error:', error);
+    res.status(500).json({ error: 'Error al eliminar usuario' });
   }
 };

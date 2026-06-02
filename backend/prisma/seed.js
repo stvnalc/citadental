@@ -57,6 +57,22 @@ async function main() {
   });
   console.log('✅ Admin user created (admin@pidentalgroup.com / admin123)');
 
+  // ─── Staff User ───
+  const staffPassword = await bcrypt.hash('staff123', 12);
+  const staff = await prisma.user.upsert({
+    where: { email: 'staff@pidentalgroup.com' },
+    update: {},
+    create: {
+      email: 'staff@pidentalgroup.com',
+      password: staffPassword,
+      firstName: 'Laura',
+      lastName: 'Staff Demo',
+      phone: '+58 414-555-9999',
+      role: 'staff',
+    },
+  });
+  console.log('✅ Staff user created (staff@pidentalgroup.com / staff123)');
+
   // ─── Services ───
   const servicesData = [
     { name: 'Limpieza Dental', description: 'Limpieza profesional con ultrasonido para eliminar sarro y placa bacteriana.', duration: 45, price: 35 },

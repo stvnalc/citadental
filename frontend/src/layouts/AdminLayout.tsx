@@ -1,16 +1,17 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { LayoutDashboard, CalendarDays, Stethoscope, Clock, Users, Settings, LogOut, Menu, X } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Stethoscope, Clock, Users, Settings, LogOut, Menu, X, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import clinicLogo from "@/assets/clinic-logo.jpg";
 
-const navItems = [
-  { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/citas", label: "Citas", icon: CalendarDays },
-  { to: "/admin/servicios", label: "Servicios", icon: Stethoscope },
-  { to: "/admin/horarios", label: "Horarios", icon: Clock },
-  { to: "/admin/pacientes", label: "Pacientes", icon: Users },
-  { to: "/admin/configuracion", label: "Configuración", icon: Settings },
+const allNavItems = [
+  { to: "/admin", label: "Dashboard", icon: LayoutDashboard, roles: ['admin', 'staff'] },
+  { to: "/admin/citas", label: "Citas", icon: CalendarDays, roles: ['admin', 'staff'] },
+  { to: "/admin/servicios", label: "Servicios", icon: Stethoscope, roles: ['admin', 'staff'] },
+  { to: "/admin/horarios", label: "Horarios", icon: Clock, roles: ['admin', 'staff'] },
+  { to: "/admin/pacientes", label: "Pacientes", icon: Users, roles: ['admin', 'staff'] },
+  { to: "/admin/usuarios", label: "Usuarios", icon: Shield, roles: ['admin'] },
+  { to: "/admin/configuracion", label: "Configuración", icon: Settings, roles: ['admin'] },
 ];
 
 export default function AdminLayout() {
@@ -18,6 +19,7 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const navItems = allNavItems.filter(item => item.roles.includes(user?.role || ''));
 
   const handleLogout = () => {
     logout();
@@ -60,7 +62,7 @@ export default function AdminLayout() {
             <div className="h-9 w-9 rounded-full bg-sidebar-primary flex items-center justify-center text-sm font-bold text-white">{initials}</div>
             <div>
               <p className="text-sm font-medium text-white">{fullName}</p>
-              <p className="text-xs text-sidebar-foreground capitalize">{user?.role || 'Administrador'}</p>
+              <p className="text-xs text-sidebar-foreground capitalize">{user?.role === 'admin' ? 'Administrador' : user?.role === 'staff' ? 'Staff' : user?.role || 'Administrador'}</p>
             </div>
           </div>
           <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-sidebar-foreground hover:text-white transition-colors">

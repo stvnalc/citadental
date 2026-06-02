@@ -19,6 +19,7 @@ interface AuthContextType {
   register: (data: { firstName: string; lastName: string; email: string; phone: string; password: string }) => Promise<User>;
   logout: () => void;
   isAdmin: boolean;
+  isStaff: boolean;
   isPatient: boolean;
 }
 
@@ -85,7 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
-      isAdmin: user?.role === 'admin' || user?.role === 'staff',
+      isAdmin: user?.role === 'admin',
+      isStaff: user?.role === 'staff',
       isPatient: user?.role === 'patient',
     }}>
       {children}

@@ -3,8 +3,22 @@ import clinicLogo from "@/assets/clinic-logo.jpg";
 import { adminAPI } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function AdminSettings() {
+  const { user } = useAuth();
+
+  if (user?.role !== 'admin') {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-foreground mb-2">Acceso restringido</h2>
+          <p className="text-sm text-muted-foreground">Solo los administradores pueden acceder a la configuración.</p>
+        </div>
+      </div>
+    );
+  }
+
   const [clinic, setClinic] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
